@@ -16,6 +16,7 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"regexp"
@@ -151,6 +152,48 @@ func readAliasFromBytes(data []byte, alias *Alias) error {
 	return nil
 }
 
+type String2 string
+
+// String ...
+type String struct {
+	s string
+}
+
+type Interface struct {
+	interface
+}
+
+// // MarshalYAML ...  Some Comment
+// func (c *String) MarshalYAML() (interface{}, error) {
+// 	return ("\"" + (*c).string + "\""), nil
+// }
+
+// // MarshalYAML ...  Some Comment
+// func (c *String2) MarshalYAML() (interface{}, error) {
+// 	return ("\"" + *c + "\""), nil
+// }
+
+// MarshalYAML ...  Some Comment
+func (c String) MarshalYAML() (interface{}, error) {
+	fmt.Println("Nice")
+	return ("\"" + c.s + "\""), nil
+}
+
+// MarshalYAML ...  Some Comment
+func (c String2) MarshalYAML() (interface{}, error) {
+	fmt.Println("Nice")
+	return ("\"" + c + "\""), nil
+}
+
+// MarshalYAML ...  Some Comment
+func (i Interface) MarshalYAML() (interface{}, error) {
+	// if v := i.s(string); v {
+	// 	return i, nil
+	// }
+
+	return i, nil
+}
+
 // PreprocessString handles managing alias definitions from a provided string definitions expected to be in JSON format.
 func preprocessString(alias *Alias, str string) (string, bool, error) {
 	//alias.loadGlobalDefinitions TODO?
@@ -229,6 +272,49 @@ func preprocessBytes(data []byte) ([]byte, Alias, bool, error) {
 	str := string(remainingData)
 	parsedStr, changed, err := preprocessString(alias, str)
 
+	return []byte(parsedStr), *alias, changed, err
+}
+
+// PreprocessBytes Handles byte encoded data that can be parsed through pre processing
+func preprocessUnique(data []byte) ([]byte, Alias, bool, error) {
+	var config map[string]Interface
+
+	alias := &Alias{}
+
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, Alias{}, false, err
+	}
+	// Removes alias portion from input file string
+
+	_, ok := config["alias"]
+
+	if ok {
+
+		aliasData, errMarshal := yaml.Marshal(config["alias"])
+		if errMarshal != nil {
+			return nil, Alias{}, false, errMarshal
+		}
+
+		errUnMarshal := yaml.Unmarshal(aliasData, alias)
+		if errUnMarshal != nil {
+			return nil, *alias, false, errUnMarshal
+		}
+
+		delete(config, "alias")
+	}
+
+	dataNoAlias, errMarshal := yaml.Marshal(config)
+	if errMarshal != nil {
+		return nil, *alias, false, errMarshal
+	}
+
+	if alias.AliasMap == nil && alias.AliasSrc == nil {
+		return data, *alias, false, nil
+	}
+
+	// Search and Replace
+	str := string(dataNoAlias)
+	parsedStr, changed, err := preprocessString(alias, str)
 	return []byte(parsedStr), *alias, changed, err
 }
 
